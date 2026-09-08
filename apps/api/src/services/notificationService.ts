@@ -19,8 +19,8 @@ export interface OrderData {
 }
 
 export async function sendOrderNotification(order: OrderData): Promise<void> {
-  const token = process.env.BOT_TOKEN;
-  const adminChatId = process.env.ADMIN_CHAT_ID;
+  const token = process.env.BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+  const adminChatId = process.env.ADMIN_CHAT_ID || process.env.TELEGRAM_ADMIN_CHAT_ID;
 
   if (!token || !adminChatId) {
     console.warn('BOT_TOKEN или ADMIN_CHAT_ID не заданы в переменных окружения.');
@@ -59,8 +59,23 @@ ${itemsText}
   }
 }
 
-// Экспорт класса для app.ts
 export class NotificationService {
+  async drain() {
+    return Promise.resolve();
+  }
+
+  async start() {
+    return Promise.resolve();
+  }
+
+  async stop() {
+    return Promise.resolve();
+  }
+
+  async init() {
+    return Promise.resolve();
+  }
+
   async notifyNewOrder(order: any) {
     return sendOrderNotification(order);
   }
@@ -70,6 +85,5 @@ export class NotificationService {
   }
 }
 
-// Экспорт экземпляра и функции
 export const notificationService = new NotificationService();
 export default notificationService;
