@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 290"><title>cup clay</title><defs>
+<linearGradient id="bg" x2="1" y2="1"><stop stop-color="#565e48"/><stop offset="1" stop-color="#2b3326"/></linearGradient>
+<radialGradient id="light"><stop stop-color="#b0b391" stop-opacity=".25"/><stop offset="1" stop-color="#454d36" stop-opacity="0"/></radialGradient>
+<linearGradient id="amber"><stop stop-color="#3a2414"/><stop offset=".3" stop-color="#a66c36"/><stop offset=".75" stop-color="#664020"/><stop offset="1" stop-color="#2d2114"/></linearGradient>
+<linearGradient id="green"><stop stop-color="#212b1e"/><stop offset=".45" stop-color="#647348"/><stop offset="1" stop-color="#252f20"/></linearGradient>
+<linearGradient id="cream"><stop stop-color="#857d63"/><stop offset=".4" stop-color="#d0c7ab"/><stop offset="1" stop-color="#756e57"/></linearGradient>
+<linearGradient id="paper"><stop stop-color="#9b956f"/><stop offset=".5" stop-color="#c4bf94"/><stop offset="1" stop-color="#8e8d67"/></linearGradient>
+<linearGradient id="clay"><stop stop-color="#855539"/><stop offset=".5" stop-color="#c39166"/><stop offset="1" stop-color="#825335"/></linearGradient>
+<linearGradient id="sand"><stop stop-color="#8d8263"/><stop offset=".5" stop-color="#d2c8a7"/><stop offset="1" stop-color="#8e8266"/></linearGradient>
+<linearGradient id="stone" x2=".7" y2="1"><stop stop-color="#989c7c"/><stop offset="1" stop-color="#62694f"/></linearGradient>
+<filter id="shadow" x="-50%" y="-40%" width="220%" height="200%"><feDropShadow dx="9" dy="15" stdDeviation="11" flood-color="#111a0d" flood-opacity=".55"/></filter>
+<filter id="blur"><feGaussianBlur stdDeviation="6"/></filter>
+<filter id="grain"><feTurbulence type="fractalNoise" baseFrequency=".55" numOctaves="3" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/><feComponentTransfer><feFuncA type="linear" slope=".055"/></feComponentTransfer><feBlend in="SourceGraphic" mode="soft-light"/></filter>
+</defs><rect width="320" height="290" fill="url(#bg)"/><ellipse cx="130" cy="75" rx="200" ry="140" fill="url(#light)"/><path d="M0 239Q160 220 320 239V290H0Z" fill="#515a42" opacity=".3"/><g transform="translate(10,8)"><g filter="url(#shadow)"><path d="M213 117C280 99 282 203 216 192" stroke="#ab7752" stroke-width="17" fill="none"/><path d="M82 111L90 207Q96 235 153 235Q206 235 214 207L222 111Z" fill="url(#clay)"/><ellipse cx="152" cy="111" rx="70" ry="24" fill="#c39168"/><ellipse cx="152" cy="112" rx="60" ry="17" fill="#795034"/><ellipse cx="152" cy="117" rx="53" ry="11" fill="#4b4430"/><path d="M99 144L106 204" stroke="#ead9b0" opacity=".14" stroke-width="7"/><text x="154" y="189" text-anchor="middle" font-size="7" fill="#785139" font-family="Arial" letter-spacing="2">form &amp; field</text></g></g><rect width="320" height="290" fill="transparent" filter="url(#grain)" pointer-events="none"/></svg>
