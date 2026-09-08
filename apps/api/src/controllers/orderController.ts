@@ -1,4 +1,4 @@
-import { Request, Response } from 'express';
+import { Request, Response, Router } from 'express';
 import { orderRequestSchema } from '../../../../shared/schemas';
 import { sendOrderNotification, OrderData } from '../services/notificationService';
 
@@ -41,9 +41,15 @@ export async function handleCreateOrder(req: Request, res: Response) {
   }
 }
 
-// Экспорт объекта для apps/api/src/routes/index.ts
-export const orderController = {
-  handleCreateOrder,
-  createOrder: handleCreateOrder,
-  create: handleCreateOrder,
-};
+// Фабричная функция, которую вызывает роутер: orderController(config, orders, notifications)
+export function orderController(..._args: any[]) {
+  const router = Router();
+  router.post('/', handleCreateOrder);
+  return router;
+}
+
+// Дополнительные свойства на случай прямого вызова методов
+orderController.createOrder = handleCreateOrder;
+orderController.handleCreateOrder = handleCreateOrder;
+
+export default orderController;
