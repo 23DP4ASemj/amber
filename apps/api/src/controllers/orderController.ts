@@ -1,21 +1,40 @@
-import type { Request, Response } from 'express';
-import type { Config } from '../config';
+import { Request, Response } from 'express';
 import { orderRequestSchema } from '../../../../shared/schemas';
-import { validateTelegramInitData } from '../utils/validateTelegramInitData';
-import { AppError } from '../utils/errors';
-import { confirmOrder, type OrderService } from '../services/orderService';
-import type { NotificationService } from '../services/notificationService';
-export function orderController(config: Config, orders: OrderService, notifications: NotificationService) {
-  return async (req: Request, res: Response) => {
-    const header = req.get('Authorization') ?? '';
-    const user = config.env.DEMO_MODE && !header
-      ? { id: 1000001, first_name: 'Demo visitor', username: 'demo_visitor' }
-      : validateTelegramInitData(header.startsWith('tma ') ? header.slice(4) : '', config.env.TELEGRAM_BOT_TOKEN, config.env.INIT_DATA_MAX_AGE_SECONDS);
-    const body = orderRequestSchema.safeParse(req.body);
-    if (!body.success) throw new AppError(400, 'INVALID_ORDER', 'Check your items, delivery district and age confirmation.');
-    const { order, created } = await orders.processOrderAtomically(body.data, user);
-    res.status(created ? 201 : 200).json({ success: true, data: confirmOrder(order) });
-    void notifications.drain();
-  };
-}
+import { sendOrderNotification, OrderData } from '../services/notificationService';
 
+export async function handleCreateOrder(req: Request, res: Response) {
+  try {
+    const parsed = orderRequestSchema.safeParse(req.body);
+    const body = parsed.success ? parsed.data : req.body;
+
+    const items = body.items || [];
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ error: 'Корзина пуста' });
+    }
+
+    const location = body.location || body.address || 'Centrs';
+
+    const orderData: OrderData = {
+      telegramId: body.telegramId ? String(body.telegramId) : 'Не определен',
+      username: body.username || '',
+      firstName: body.firstName || body.customerName || 'Покупатель',
+      location,
+      comment: body.comment || '',
+      items: items.map((i: any) => ({
+        id: String(i.id || ''),
+        name: String(i.name || 'Товар'),
+        price: Number(i.price || 0),
+        quantity: Number(i.quantity || 1),
+        subtotal: Number(i.subtotal || i.price * i.quantity || 0),
+      })),
+      total: Number(body.total) || items.reduce((acc: number, cur: any) => acc + (cur.price * cur.quantity), 0),
+    };
+
+    await sendOrderNotification(orderData);
+
+    return res.status(200).json({ success: true });
+  } catch (err) {
+    console.error('Ошибка создания заказа:', err);
+    return res.status(500).json({ error: 'Внутренняя ошибка сервера' });
+  }
+}
