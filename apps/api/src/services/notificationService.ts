@@ -59,6 +59,17 @@ ${itemsText}
   }
 }
 
-export const notificationService = {
-  sendOrderNotification,
-};
+// Экспорт класса для app.ts
+export class NotificationService {
+  async notifyNewOrder(order: any) {
+    return sendOrderNotification(order);
+  }
+
+  async sendOrderNotification(order: OrderData) {
+    return sendOrderNotification(order);
+  }
+}
+
+// Экспорт экземпляра и функции
+export const notificationService = new NotificationService();
+export default notificationService;
