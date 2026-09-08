@@ -27,7 +27,9 @@ export async function handleCreateOrder(req: Request, res: Response) {
         quantity: Number(i.quantity || 1),
         subtotal: Number(i.subtotal || i.price * i.quantity || 0),
       })),
-      total: Number(body.total) || items.reduce((acc: number, cur: any) => acc + (cur.price * cur.quantity), 0),
+      total:
+        Number(body.total) ||
+        items.reduce((acc: number, cur: any) => acc + (cur.price || 0) * (cur.quantity || 1), 0),
     };
 
     await sendOrderNotification(orderData);
@@ -38,3 +40,10 @@ export async function handleCreateOrder(req: Request, res: Response) {
     return res.status(500).json({ error: 'Внутренняя ошибка сервера' });
   }
 }
+
+// Экспорт объекта для apps/api/src/routes/index.ts
+export const orderController = {
+  handleCreateOrder,
+  createOrder: handleCreateOrder,
+  create: handleCreateOrder,
+};
