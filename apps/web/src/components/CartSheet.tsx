@@ -1,93 +1,175 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, ArrowRight, Check, CheckCheck, MapPin, Minus, Plus, ShieldCheck, ShoppingBag, Trash2, Send } from 'lucide-react';
-import type { OrderRequest, OrderConfirmation, Product, PublicConfig } from '../../../../shared/types';
-import { orderRequestSchema } from '../../../../shared/schemas';
-import type { Cart } from '../hooks/useCart';
-import { api, ApiError, money } from '../lib/api';
-import { readStorage, writeStorage, removeStorage } from '../lib/storage';
-import { telegram } from '../lib/telegram';
-import { Modal } from './Modal';
-const pendingKey = 'as:pending-checkout';
-function getPending() {
-  const parsed = orderRequestSchema.safeParse(readStorage<unknown>(pendingKey, null, true));
-  return parsed.success ? parsed.data : null;
+import React, { useState } from 'react';
+import { useCart } from '../hooks/useCart';
+
+interface CartSheetProps {
+  isOpen: boolean;
+  onClose: () => void;
 }
-export function CartSheet({ cart, config, products, district, onDistrict, onClose, onRefresh, onPendingChange }: {
-  cart: Cart; config: PublicConfig; products: Product[]; district: string; onDistrict: (v: string) => void; onClose: () => void; onRefresh: () => Promise<void>; onPendingChange: (pending: boolean) => void;
-}) {
-  const [pending, setPending] = useState<OrderRequest | null>(getPending);
-  useEffect(() => { onPendingChange(Boolean(pending)); }, [pending, onPendingChange]);
-  const [step, setStep] = useState<'cart' | 'checkout'>(() => getPending() ? 'checkout' : 'cart');
-  const [confirmed, setConfirmed] = useState(false);
-  const [verificationToken, setVerificationToken] = useState('');
-  const [result, setResult] = useState<OrderConfirmation | null>(null);
-  const [error, setError] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const submittingRef = useRef(false);
-  const shownItems = pending?.items ?? cart.items;
-  const selectedDistrict = pending?.district ?? district;
-  const user = telegram()?.initDataUnsafe.user;
-  const canOrder = config.demoMode || Boolean(telegram()?.initData);
-  const invalidItems = shownItems.some(i => {
-    const p = products.find(p => p.id === i.product_id);
-    return !p || i.qty > p.available || p.blocked_districts.includes(selectedDistrict);
-  });
-  const districtBlocked = config.compliance.blockedDistricts.includes(selectedDistrict);
-  const submit = async () => {
-    if (submittingRef.current) return;
-    submittingRef.current = true; setSubmitting(true); setError('');
-    const body: OrderRequest = pending ?? { client_order_id: crypto.randomUUID(), district, items: cart.items, age_confirmed: true,
-      ...(verificationToken ? { age_verification_token: verificationToken } : {}) };
-    setPending(body); writeStorage(pendingKey, body, true);
+
+const LOCATIONS = ['Centrs', 'Imanta', 'Zolitūde', 'Salaspils'] as const;
+
+export function CartSheet({ isOpen, onClose }: CartSheetProps) {
+  const { cart, totalAmount, clearCart, updateQuantity } = useCart();
+  const [selectedLocation, setSelectedLocation] = useState<string>(LOCATIONS[0]);
+  const [comment, setComment] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [orderSent, setOrderSent] = useState(false);
+
+  if (!isOpen) return null;
+
+  const handleCheckout = async () => {
+    setIsSubmitting(true);
+
+    const tg = (window as any).Telegram?.WebApp;
+    const tgUser = tg?.initDataUnsafe?.user;
+
+    const orderData = {
+      telegramId: tgUser?.id ? String(tgUser.id) : 'Не определен',
+      username: tgUser?.username ? `@${tgUser.username}` : '',
+      firstName: tgUser?.first_name || 'Покупатель',
+      location: selectedLocation,
+      comment: comment.trim(),
+      items: Object.values(cart).map((item: any) => ({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        quantity: item.quantity,
+        subtotal: item.price * item.quantity,
+      })),
+      total: totalAmount,
+    };
+
     try {
-      const order = await api.order(body);
-      setResult(order); cart.clear(); setPending(null); removeStorage(pendingKey, true);
-      await onRefresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'We could not place your order.');
-      if (err instanceof ApiError && err.status >= 400 && err.status < 500 && err.status !== 408 && err.code !== 'IDEMPOTENCY_CONFLICT') {
-        setPending(null); removeStorage(pendingKey, true);
-        if (['OUT_OF_STOCK', 'PRODUCT_UNAVAILABLE'].includes(err.code)) { setStep('cart'); await onRefresh(); }
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(orderData),
+      });
+
+      if (res.ok) {
+        setOrderSent(true);
+        clearCart();
+        if (tg?.sendData) {
+          tg.sendData(JSON.stringify(orderData));
+        }
+      } else {
+        alert('Ошибка при оформлении заказа. Попробуйте снова.');
       }
-    } finally { setSubmitting(false); submittingRef.current = false; }
+    } catch (e) {
+      console.error(e);
+      alert('Сетевая ошибка при отправке.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
-  if (result) return <Modal title="A little good is on its way" onClose={onClose}><div className="success-content">
-    <span className="success-icon"><CheckCheck size={38}/></span><span className="eyebrow">{config.demoMode ? 'DEMO ORDER RECEIVED' : 'THANK YOU FOR YOUR ORDER'}</span>
-    <h3>Good choice.<br/><em>Great little ritual.</em></h3><p>{config.demoMode ? 'This is a sample order. No delivery or Telegram messages will be sent.' : 'Your order is saved. We will send the details and next steps to your Telegram.'}</p>
-    <div className="receipt"><div><span>Order number</span><strong>{result.order_id}</strong></div><div><span>Delivery district</span><strong>{result.district}</strong></div>
-      <div><span>Total</span><strong>{money(result.total)}</strong></div></div><button className="primary" onClick={onClose}>Back to the collection <ArrowRight size={18}/></button>
-    </div></Modal>;
-  return <Modal title={step === 'cart' ? 'Your bag' : 'The final little details'} onClose={() => { if (!submittingRef.current) onClose(); }}>
-    {!shownItems.length ? <div className="empty-state"><ShoppingBag size={40}/><h3>A little room for something good.</h3><p>Find your next everyday favourite in our collection.</p><button className="primary" onClick={onClose}>Explore the collection <ArrowRight size={18}/></button></div> :
-      <div className="cart-content">
-        {step === 'checkout' && !pending && <button className="back-link" onClick={() => setStep('cart')}><ArrowLeft size={16}/> Back to your bag</button>}
-        {pending && <div className="notice">Your checkout is saved. Retrying checks the same order, so it will not create a second one.</div>}
-        <div className="cart-items">{shownItems.map(item => {
-          const product = products.find(p => p.id === item.product_id);
-          return <div className="cart-item" key={item.product_id}><img src={product?.image_url || '/products/fallback.svg'} alt="" onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = '/products/fallback.svg'; }}/>
-            <div className="cart-item-main"><h3>{product?.name ?? 'Unavailable item'}</h3><p>{product?.flavor ?? item.product_id}</p>
-              {step === 'cart' ? <div className="quantity-control"><button onClick={() => cart.setQuantity(item.product_id, item.qty - 1)} aria-label={'Decrease ' + product?.name}><Minus size={14}/></button><span>{item.qty}</span>
-                <button onClick={() => cart.setQuantity(item.product_id, item.qty + 1)} disabled={!product || item.qty >= product.available} aria-label={'Increase ' + product?.name}><Plus size={14}/></button></div>
-                : <span className="item-quantity">Quantity: {item.qty}</span>}
-              {(!product || item.qty > product.available || product.blocked_districts.includes(selectedDistrict)) && <span className="item-error">Please remove this item or reduce its quantity.</span>}
-            </div><div className="cart-item-end"><strong>{product ? money(product.price * item.qty) : '—'}</strong>
-              {step === 'cart' && <button className="icon-button" onClick={() => cart.setQuantity(item.product_id, 0)} aria-label={'Remove ' + product?.name}><Trash2 size={17}/></button>}</div></div>;
-        })}</div>
-        {step === 'checkout' && <section className="checkout-fields"><label className="field-label"><MapPin size={16}/> Your delivery district</label>
-          <div className="district-options">{config.districts.map(d => <button key={d} disabled={Boolean(pending) || config.compliance.blockedDistricts.includes(d)}
-            className={'option ' + (selectedDistrict === d ? 'selected' : '')} onClick={() => onDistrict(d)}>{d}{selectedDistrict === d && <Check size={14}/>}</button>)}</div>
-          <div className="telegram-account"><Send size={19}/><div><strong>{user ? user.username ? '@' + user.username : user.first_name : config.demoMode ? 'Demo visitor' : 'Open this shop in Telegram'}</strong>
-            <span>{user ? 'Order updates will arrive in this Telegram account' : config.demoMode ? 'Sample orders only · no messages are sent' : 'Telegram authentication is required to place an order'}</span></div></div>
-          {!pending && <><label className="checkbox-row"><input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)}/><span>I confirm that I am {config.compliance.minimumAge} or older and have reviewed my order and delivery district.</span></label>
-            {config.compliance.ageVerificationMode === 'external' && <label className="field-label">Age verification code<input className="text-input" value={verificationToken} onChange={e => setVerificationToken(e.target.value)} autoComplete="off" placeholder="Code from your age verification service"/><small>Use the code issued after verifying your age with the shop's verification service.</small></label>}</>}
-          <p className="fine-print">{config.compliance.legalNotice}</p></section>}
-        {error && <div className="error-message" role="alert">{error}</div>}
-        {districtBlocked && <div className="error-message">Checkout is unavailable in this district. Choose another district.</div>}
-        <div className="cart-summary"><div><span>Subtotal</span><span>{money(cart.total)}</span></div><div><span>Delivery</span><span>Included</span></div><div className="summary-total"><span>Total</span><strong>{money(cart.total)}</strong></div></div>
-        {step === 'cart' ? <button className="primary" disabled={invalidItems} onClick={() => { setStep('checkout'); setError(''); }}>Continue to checkout <ArrowRight size={19}/></button>
-          : <button className="primary" disabled={submitting || !canOrder || (!pending && (!confirmed || invalidItems || districtBlocked || (config.compliance.ageVerificationMode === 'external' && !verificationToken)))}
-            onClick={() => { void submit(); }}>{submitting ? 'Placing your order…' : pending ? 'Retry this checkout' : config.demoMode ? 'Place demo order' : 'Place order'}<ArrowRight size={19}/></button>}
-        <p className="secure-note"><ShieldCheck size={14}/>{step === 'cart' ? 'A few taps away from your next favourite' : 'Pay on delivery · no payment is collected here'}</p>
-      </div>}
-  </Modal>;
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex justify-end">
+      <div className="w-full max-w-md bg-slate-900 h-full flex flex-col p-5 overflow-y-auto border-l border-slate-800">
+        <div className="flex justify-between items-center mb-5 pb-3 border-b border-slate-800">
+          <h2 className="text-lg font-bold text-white">Корзина</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-white p-2 text-xl">✕</button>
+        </div>
+
+        {orderSent ? (
+          <div className="flex-1 flex flex-col justify-center items-center text-center">
+            <div className="text-5xl mb-4">✅</div>
+            <h3 className="text-xl font-bold mb-2 text-white">Заказ принят!</h3>
+            <p className="text-slate-400 text-sm mb-6">
+              Точка: <b>{selectedLocation}</b>.<br />
+              Менеджер свяжется с вами в Telegram.
+            </p>
+            <button
+              onClick={() => {
+                setOrderSent(false);
+                onClose();
+              }}
+              className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-xl font-semibold"
+            >
+              Закрыть
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="flex-1 space-y-3 overflow-y-auto pr-1">
+              {Object.values(cart).length === 0 ? (
+                <div className="text-center text-slate-500 py-8">Корзина пуста</div>
+              ) : (
+                Object.values(cart).map((item: any) => (
+                  <div key={item.id} className="bg-slate-800/70 p-3 rounded-xl flex justify-between items-center border border-slate-800">
+                    <div>
+                      <div className="font-semibold text-sm text-white">{item.name}</div>
+                      <div className="text-xs text-blue-400 font-bold mt-0.5">{item.price} € × {item.quantity}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => updateQuantity(item.id, -1)}
+                        className="w-7 h-7 bg-slate-700 hover:bg-slate-600 rounded-lg flex items-center justify-center font-bold text-slate-300"
+                      >
+                        -
+                      </button>
+                      <span className="text-sm font-bold min-w-4 text-center text-white">{item.quantity}</span>
+                      <button
+                        onClick={() => updateQuantity(item.id, 1)}
+                        className="w-7 h-7 bg-blue-600 hover:bg-blue-500 rounded-lg flex items-center justify-center font-bold text-white"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            <div className="mt-5 pt-4 border-t border-slate-800">
+              <label className="block text-xs font-semibold uppercase text-slate-400 mb-2">
+                📍 Выберите точку выдачи:
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {LOCATIONS.map((loc) => (
+                  <button
+                    key={loc}
+                    type="button"
+                    onClick={() => setSelectedLocation(loc)}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold transition-all border ${
+                      selectedLocation === loc
+                        ? 'bg-blue-600/20 border-blue-500 text-blue-400'
+                        : 'bg-slate-800/40 border-slate-800 text-slate-400 hover:bg-slate-800'
+                    }`}
+                  >
+                    {loc}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-3">
+                <input
+                  type="text"
+                  placeholder="Комментарий (время, пожелания)..."
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="mt-5 pt-4 border-t border-slate-800 flex flex-col gap-3">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-400 text-sm">Итого к оплате:</span>
+                <span className="text-lg font-bold text-blue-400">{totalAmount} €</span>
+              </div>
+
+              <button
+                onClick={handleCheckout}
+                disabled={isSubmitting || Object.keys(cart).length === 0}
+                className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-blue-600/30 transition-all"
+              >
+                {isSubmitting ? 'Отправка...' : `Подтвердить заказ (${selectedLocation})`}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
 }

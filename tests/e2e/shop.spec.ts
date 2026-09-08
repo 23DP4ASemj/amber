@@ -1,0 +1,64 @@
+import { test, expect } from '@playwright/test';
+test.beforeEach(async ({ page }) => {
+  await page.route('https://telegram.org/**', route => route.abort());
+  await page.goto('/');
+});
+test('age gate, catalogue, search, stock filters and variants', async ({ page }, testInfo) => {
+  await expect(page.getByRole('button', { name: 'I am 18 or older' })).toBeVisible();
+  await page.getByRole('button', { name: 'I am 18 or older' }).click();
+  await expect(page.locator('.product-card')).toHaveCount(8);
+  await page.screenshot({ path: 'test-results/catalog-' + testInfo.project.name + '.png', fullPage: true });
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+  expect(overflow).toBe(false);
+  await page.getByRole('textbox', { name: 'Search products' }).fill('rooibos');
+  await expect(page.locator('.product-card')).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Golden hour tea', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Clear search' }).click();
+  await page.getByRole('button', { name: 'Filters', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'In stock only' }).check();
+  await expect(page.locator('.product-card')).toHaveCount(7);
+  await page.getByRole('button', { name: 'View The ritual cup, Sandstone · 250 ml' }).click();
+  await page.getByRole('button', { name: 'Terracotta · 250 ml', exact: true }).click();
+  await expect(page.getByRole('dialog').getByText('Warm terracotta stoneware', { exact: false })).toBeVisible();
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+});
+test('bag, district selection, checkout, confirmation and cleared cart', async ({ page }, testInfo) => {
+  await page.getByRole('button', { name: 'I am 18 or older' }).click();
+  await page.getByRole('button', { name: 'Add The evening candle, Amber & sandalwood to bag' }).click();
+  await page.getByRole('button', { name: 'Open bag, 1 items' }).click();
+  await expect(page.getByRole('dialog').getByText('€24.00').first()).toBeVisible();
+  await page.getByRole('button', { name: 'Continue to checkout' }).click();
+  await page.getByRole('button', { name: 'Imanta', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Place demo order' })).toBeDisabled();
+  await page.getByRole('checkbox', { name: 'I confirm that I am' }).check();
+  await page.screenshot({ path: 'test-results/checkout-' + testInfo.project.name + '.png' });
+  await page.getByRole('button', { name: 'Place demo order' }).click();
+  await expect(page.getByText('DEMO ORDER RECEIVED', { exact: true })).toBeVisible();
+  await expect(page.locator('.receipt').getByText('Imanta', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Back to the collection' }).click();
+  await expect(page.getByRole('button', { name: 'Open bag, 0 items' })).toBeVisible();
+});
+test('a lost order response is retried with the same key after reload', async ({ page }) => {
+  await page.getByRole('button', { name: 'I am 18 or older' }).click();
+  await page.getByRole('button', { name: 'Add Little things tray, Olive · 14 cm to bag' }).click();
+  await page.getByRole('button', { name: 'Open bag, 1 items' }).click();
+  await page.getByRole('button', { name: 'Continue to checkout' }).click();
+  await page.getByRole('checkbox', { name: 'I confirm that I am' }).check();
+  let firstId = '';
+  await page.route('**/api/orders', async route => {
+    firstId = route.request().postDataJSON().client_order_id;
+    await route.fetch();
+    await route.abort('failed');
+  }, { times: 1 });
+  await page.getByRole('button', { name: 'Place demo order' }).click();
+  await expect(page.getByRole('button', { name: 'Retry this checkout' })).toBeVisible();
+  await page.reload();
+  await expect(page.locator('.product-card')).toHaveCount(8);
+  await page.getByRole('button', { name: 'Open bag, 1 items' }).click();
+  const responsePromise = page.waitForResponse(r => r.url().endsWith('/api/orders'));
+  await page.getByRole('button', { name: 'Retry this checkout' }).click();
+  const response = await responsePromise;
+  expect(response.status()).toBe(200);
+  expect(response.request().postDataJSON().client_order_id).toBe(firstId);
+  await expect(page.getByText('DEMO ORDER RECEIVED', { exact: true })).toBeVisible();
+});

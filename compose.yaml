@@ -1,0 +1,18 @@
+services:
+  shop:
+    build: .
+    init: true
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DEMO_MODE: "false"
+      DATA_DIR: /app/data
+    ports:
+      - "127.0.0.1:3001:3001"
+    volumes:
+      - shop-data:/app/data
+    stop_grace_period: 30s
+volumes:
+  shop-data:
+
