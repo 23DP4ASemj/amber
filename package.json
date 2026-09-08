@@ -14,8 +14,7 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "playwright test",
-    "build": "npm run typecheck && vite build --config apps/web/vite.config.ts && tsup apps/api/src/index.ts --format esm --platform node --target node22 --out-dir dist/api --sourcemap && tsup scripts/initSheets.ts scripts/setupBot.ts scripts/recover.ts --format esm --platform node --target node22 --out-dir dist/scripts",
-    "start": "node dist/api/index.js",
+    "build": "vite build --config apps/web/vite.config.ts && tsup apps/api/src/index.ts --format esm --platform node --target node22 --out-dir dist/api",     "start": "node dist/api/index.js",
     "sheets:init": "tsx scripts/initSheets.ts",
     "bot:setup": "tsx scripts/setupBot.ts",
     "orders:recover": "tsx scripts/recover.ts"
